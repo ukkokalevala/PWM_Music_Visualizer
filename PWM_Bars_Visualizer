@@ -1,0 +1,106 @@
+// PWM Music Visualizer
+// How it works:
+// Turn sound input into:
+// A PWM output signal (to drive an LED or speaker)
+// A visual animation on an OLED screen (volume bars)
+// Show basic frequency estimate
+
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "driver/ledc.h"
+
+// OLED setup
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Pins
+#define SOUND_SENSOR_PIN 4
+#define PWM_OUTPUT_PIN 5
+
+// PWM config
+#define PWM_CHANNEL LEDC_CHANNEL_0
+#define PWM_FREQ 5000
+#define PWM_RESOLUTION LEDC_TIMER_8_BIT
+
+// Frequency detection
+bool lastState = LOW;
+unsigned long lastCrossingTime = 0;
+int frequency = 0;
+
+void setup() {
+  Wire.begin(7, 6);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+
+  // PWM Timer
+  ledc_timer_config_t timer_conf = {
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .duty_resolution = PWM_RESOLUTION,
+    .timer_num = LEDC_TIMER_0,
+    .freq_hz = PWM_FREQ,
+    .clk_cfg = LEDC_AUTO_CLK
+  };
+  ledc_timer_config(&timer_conf);
+
+  // PWM Channel
+  ledc_channel_config_t channel_conf = {
+    .gpio_num = PWM_OUTPUT_PIN,
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .channel = PWM_CHANNEL,
+    .intr_type = LEDC_INTR_DISABLE,
+    .timer_sel = LEDC_TIMER_0,
+    .duty = 0,
+    .hpoint = 0
+  };
+  ledc_channel_config(&channel_conf);
+}
+
+void loop() {
+  //The sound sensor gives analog voltage based on surrounding noise.
+  //The ESP32-C3 reads it using its ADC (12-bit, 0–4095).
+
+  int soundValue = analogRead(SOUND_SENSOR_PIN);
+  //The sound sensor gives analog voltage based on surrounding noise.
+  //The ESP32-C3 reads it using its ADC (12-bit, 0–4095).
+
+  int pwmValue = map(soundValue, 0, 4095, 0, 255); 
+  ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, pwmValue);
+  ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL);
+
+  // Frequency detection
+  bool currentState = soundValue > 2048;
+  if (currentState != lastState) {
+    unsigned long now = millis();
+    frequency = 1000 / (now - lastCrossingTime + 1);
+    lastCrossingTime = now;
+  }
+  lastState = currentState;
+
+  // ==== OLED Bars ====
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.print("PWM Music Visualizer");
+  display.setCursor(0, 10);
+  display.print("Freq: ");
+  display.print(frequency);
+  display.print(" Hz");
+
+  // Draw animated bars
+  int numBars = 16;
+  int barWidth = SCREEN_WIDTH / numBars;
+  for (int i = 0; i < numBars; i++) {
+    int height = map(pwmValue + random(-20, 20), 0, 255, 2, SCREEN_HEIGHT - 20);
+    int x = i * barWidth;
+    int y = SCREEN_HEIGHT - height;
+    display.fillRect(x, y, barWidth - 1, height, WHITE);
+  }
+
+  display.display();
+  delay(30);
+}
