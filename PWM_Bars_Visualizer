@@ -60,18 +60,28 @@ void setup() {
 }
 
 void loop() {
+  //Sound input (Analog Read)
   //The sound sensor gives analog voltage based on surrounding noise.
   //The ESP32-C3 reads it using its ADC (12-bit, 0–4095).
 
   int soundValue = analogRead(SOUND_SENSOR_PIN);
-  //The sound sensor gives analog voltage based on surrounding noise.
-  //The ESP32-C3 reads it using its ADC (12-bit, 0–4095).
+  //PWM Output or Pulse Width Modulation.
+  //Maps the sound level to PWM range (0–255).
+  //Uses ledc_* functions from driver/ledc.h to control hardware PWM.
+  //PWM output can:
+  //Drive an LED (brightness changes with sound)
+  //Drive a speaker (tone changes with volume)
+
 
   int pwmValue = map(soundValue, 0, 4095, 0, 255); 
   ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, pwmValue);
   ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL);
 
-  // Frequency detection
+  // Frequency detection (Zero Crossing).
+  //Checks when the waveform crosses its midpoint (~2048).
+  //Measures time between crossings = period.
+  //Frequency = 1 / period (simplified as 1000 / ms).
+
   bool currentState = soundValue > 2048;
   if (currentState != lastState) {
     unsigned long now = millis();
@@ -92,6 +102,9 @@ void loop() {
   display.print(" Hz");
 
   // Draw animated bars
+  //Draws vertical bars based on pwmValue, with slight random() to simulate "dancing" effect.
+  //Simulates an audio visualizer like you’d see in music players.
+
   int numBars = 16;
   int barWidth = SCREEN_WIDTH / numBars;
   for (int i = 0; i < numBars; i++) {
